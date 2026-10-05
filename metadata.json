@@ -1,0 +1,6 @@
+{
+  "name": "CatatKas - Keuangan Pribadi",
+  "description": "Aplikasi keuangan pribadi untuk mencatat pemasukan dan pengeluaran harian dengan saldo Rp 7.000.000 dan sinkronisasi Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
