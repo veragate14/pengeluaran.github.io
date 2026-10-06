@@ -34,15 +34,7 @@ Beberapa kategori yang dapat digunakan:
 * 🏠 Kebutuhan Rumah
 * 📦 Lainnya
 
-## 🛠️ Teknologi
 
-* HTML
-* CSS
-* JavaScript
-* PHP
-* MySQL
-* Visual Studio Code
-* XAMPP
 
 ## 🚀 Pengembangan Selanjutnya
 
@@ -55,7 +47,6 @@ Fitur yang dapat dikembangkan di masa mendatang:
 * 💵 Pencatatan pemasukan
 * 🎯 Target anggaran bulanan
 * 📥 Export data ke Excel/PDF
-* 🌙 Dark Mode
 * 📱 Tampilan responsive
 
 ## 📌 Status
