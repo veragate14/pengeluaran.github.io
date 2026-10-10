@@ -12,7 +12,10 @@ import {
   BarChart2,
   ListFilter,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  RotateCcw,
+  Smartphone,
+  Banknote
 } from 'lucide-react';
 import { Transaction, TransactionType, FinanceSummary, GoogleSheetConfig } from './types/finance';
 import { formatRupiah, getTodayDateString, getCurrentTimeString } from './utils/formatters';
@@ -33,59 +36,24 @@ import { GoogleSheetSyncModal } from './components/GoogleSheetSyncModal';
 import { ConfirmModal } from './components/ConfirmModal';
 
 // Storage Keys
-const STORAGE_KEY_TRANSACTIONS = 'catatkas_transactions_v1';
-const STORAGE_KEY_STARTING_BALANCE = 'catatkas_starting_balance_v1';
-const STORAGE_KEY_SHEET_CONFIG = 'catatkas_sheet_config_v1';
+const STORAGE_KEY_TRANSACTIONS = 'catatkas_transactions_v2';
+const STORAGE_KEY_STARTING_BALANCE = 'catatkas_starting_balance_v2';
+const STORAGE_KEY_SHEET_CONFIG = 'catatkas_sheet_config_v2';
 
-// Initial default state with 7 Million Rupiah fund as requested
-const DEFAULT_STARTING_BALANCE = 7000000;
-
-const DEFAULT_SAMPLE_TRANSACTIONS: Transaction[] = [
-  {
-    id: 'tx-sample-1',
-    date: getTodayDateString(),
-    time: '08:30',
-    type: 'expense',
-    category: 'Makanan & Minuman',
-    amount: 35000,
-    wallet: 'Uang Tunai',
-    description: 'Sarapan lontong sayur & teh manis',
-    createdAt: Date.now() - 1000 * 60 * 60 * 3,
-  },
-  {
-    id: 'tx-sample-2',
-    date: getTodayDateString(),
-    time: '11:15',
-    type: 'expense',
-    category: 'Transportasi',
-    amount: 25000,
-    wallet: 'E-Wallet (GoPay/OVO/Dana)',
-    description: 'Bensin & parkir motor',
-    createdAt: Date.now() - 1000 * 60 * 60 * 2,
-  },
-  {
-    id: 'tx-sample-3',
-    date: getTodayDateString(),
-    time: '13:00',
-    type: 'income',
-    category: 'Freelance & Usaha',
-    amount: 250000,
-    wallet: 'Rekening Bank',
-    description: 'DP project desain grafis klien',
-    createdAt: Date.now() - 1000 * 60 * 45,
-  }
-];
+// Set default amounts to 0 as requested by the user
+const DEFAULT_STARTING_BALANCE = 0;
 
 export default function App() {
   // Auth state
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  // Financial Data State
+  // Financial Data State initialized to 0
   const [startingBalance, setStartingBalance] = useState<number>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_STARTING_BALANCE);
     if (saved !== null) {
       const parsed = parseFloat(saved);
+      if (parsed === 7000000) return 0; // Clear previous 7m default
       return !isNaN(parsed) ? parsed : DEFAULT_STARTING_BALANCE;
     }
     return DEFAULT_STARTING_BALANCE;
@@ -95,12 +63,14 @@ export default function App() {
     const saved = localStorage.getItem(STORAGE_KEY_TRANSACTIONS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Exclude any old demo sample items
+        return parsed.filter((t: any) => !t.id?.startsWith('tx-sample-'));
       } catch (e) {
         console.error('Failed to parse saved transactions:', e);
       }
     }
-    return DEFAULT_SAMPLE_TRANSACTIONS;
+    return [];
   });
 
   // Google Sheets Config
@@ -133,7 +103,7 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isSheetModalOpen, setIsSheetModalOpen] = useState(false);
 
-  // Confirmation Modal (strictly required for destructive Workspace operations)
+  // Confirmation Modal
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -208,17 +178,47 @@ export default function App() {
     showToast('Berhasil keluar dari akun Google.', 'info');
   };
 
-  // Finance Summary Calculation
+  // Finance Summary Calculation & Monthly Recap
   const summary: FinanceSummary = useMemo(() => {
-    const totalIncome = transactions
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
+    const now = new Date();
+    const currentMonthStr = now.toISOString().slice(0, 7); // YYYY-MM
 
-    const totalExpense = transactions
-      .filter((t) => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let eWalletIncome = 0;
+    let eWalletExpense = 0;
+    let cashIncome = 0;
+    let cashExpense = 0;
+    let bankIncome = 0;
+    let bankExpense = 0;
+
+    let thisMonthIncome = 0;
+    let thisMonthExpense = 0;
+
+    for (const t of transactions) {
+      const isCurrentMonth = t.date.startsWith(currentMonthStr);
+
+      if (t.type === 'income') {
+        totalIncome += t.amount;
+        if (isCurrentMonth) thisMonthIncome += t.amount;
+
+        if (t.wallet.includes('E-Wallet')) eWalletIncome += t.amount;
+        else if (t.wallet.includes('Cash')) cashIncome += t.amount;
+        else bankIncome += t.amount;
+      } else {
+        totalExpense += t.amount;
+        if (isCurrentMonth) thisMonthExpense += t.amount;
+
+        if (t.wallet.includes('E-Wallet')) eWalletExpense += t.amount;
+        else if (t.wallet.includes('Cash')) cashExpense += t.amount;
+        else bankExpense += t.amount;
+      }
+    }
 
     const currentBalance = startingBalance + totalIncome - totalExpense;
+    const eWalletBalance = Math.max(0, eWalletIncome - eWalletExpense);
+    const cashBalance = Math.max(0, cashIncome - cashExpense);
+    const bankBalance = Math.max(0, bankIncome - bankExpense);
 
     return {
       startingBalance,
@@ -226,8 +226,46 @@ export default function App() {
       totalExpense,
       currentBalance,
       transactionCount: transactions.length,
+      eWalletBalance,
+      cashBalance,
+      bankBalance,
+      thisMonthIncome,
+      thisMonthExpense,
+      thisMonthNet: thisMonthIncome - thisMonthExpense,
     };
   }, [transactions, startingBalance]);
+
+  // Reset all data to 0
+  const handleResetAllToZero = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reset Semua Jumlah Menjadi 0?',
+      message: 'Tindakan ini akan mengosongkan seluruh catatan transaksi dan mengatur saldo awal menjadi Rp 0. Data akan dimulai bersih dari awal.',
+      confirmText: 'Ya, Reset ke 0',
+      cancelText: 'Batal',
+      isDestructive: true,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setStartingBalance(0);
+        setTransactions([]);
+        localStorage.removeItem(STORAGE_KEY_TRANSACTIONS);
+        localStorage.setItem(STORAGE_KEY_STARTING_BALANCE, '0');
+        showToast('Semua jumlah berhasil direset menjadi 0.', 'info');
+
+        // Sync with Google Sheets if connected
+        if (accessToken && sheetConfig.spreadsheetId) {
+          try {
+            setIsSyncing(true);
+            await syncAllTransactionsToSheet(accessToken, sheetConfig.spreadsheetId, [], 0);
+          } catch (err) {
+            console.error('Failed to reset sheet:', err);
+          } finally {
+            setIsSyncing(false);
+          }
+        }
+      },
+    });
+  };
 
   // Add / Edit Transaction Handler
   const handleSaveTransaction = async (
@@ -239,7 +277,6 @@ export default function App() {
     let updatedTransactions: Transaction[];
 
     if (editingId) {
-      // Edit existing
       updatedTransactions = transactions.map((t) => {
         if (t.id === editingId) {
           return {
@@ -251,19 +288,27 @@ export default function App() {
       });
       showToast('Transaksi berhasil diperbarui.', 'success');
     } else {
-      // Create new
       const newTx: Transaction = {
         id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         ...data,
         createdAt: Date.now(),
       };
       updatedTransactions = [newTx, ...transactions];
+
+      const walletLabel = data.wallet.includes('E-Wallet')
+        ? 'E-Wallet'
+        : data.wallet.includes('Cash')
+        ? 'Cash'
+        : 'Bank';
+
       showToast(
-        `${data.type === 'income' ? 'Pemasukan' : 'Pengeluaran'} ${formatRupiah(data.amount)} berhasil dicatat!`,
+        data.type === 'income'
+          ? `Pemasukan ${formatRupiah(data.amount)} berhasil masuk ke saldo dana (${walletLabel})!`
+          : `Pengeluaran ${formatRupiah(data.amount)} (${data.description}) berhasil dicatat dari ${walletLabel}!`,
         'success'
       );
 
-      // If connected to Google Sheets, append directly to sheet
+      // If connected to Google Sheets, append directly
       if (accessToken && sheetConfig.spreadsheetId) {
         try {
           setIsSyncing(true);
@@ -285,12 +330,12 @@ export default function App() {
     setEditingTransaction(null);
   };
 
-  // Delete transaction with user confirmation (MANDATORY per Workspace integration skill)
+  // Delete transaction with user confirmation
   const handleDeleteTransaction = (tx: Transaction) => {
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Catatan Transaksi?',
-      message: `Apakah Anda yakin ingin menghapus catatan "${tx.category}" sebesar ${formatRupiah(tx.amount)} pada tanggal ${tx.date}?\n\nJika Google Sheets terhubung, perubahan ini juga akan disinkronkan ke spreadsheet Anda.`,
+      message: `Hapus catatan "${tx.description || tx.category}" sebesar ${formatRupiah(tx.amount)} (${tx.wallet}) pada tanggal ${tx.date}?`,
       confirmText: 'Ya, Hapus',
       cancelText: 'Batal',
       isDestructive: true,
@@ -300,7 +345,6 @@ export default function App() {
         setTransactions(updated);
         showToast('Transaksi berhasil dihapus.', 'info');
 
-        // Sync with Google Sheets if connected
         if (accessToken && sheetConfig.spreadsheetId) {
           try {
             setIsSyncing(true);
@@ -324,21 +368,19 @@ export default function App() {
     });
   };
 
-  // Edit transaction handler
   const handleOpenEditModal = (tx: Transaction) => {
     setEditingTransaction(tx);
     setModalTxType(tx.type);
     setIsTxModalOpen(true);
   };
 
-  // Open Add modal
   const handleOpenAddModal = (type: TransactionType = 'expense') => {
     setEditingTransaction(null);
     setModalTxType(type);
     setIsTxModalOpen(true);
   };
 
-  // Google Sheets: Create New Spreadsheet
+  // Google Sheets Handlers
   const handleCreateNewSheet = async () => {
     if (!accessToken) {
       await handleLogin();
@@ -349,10 +391,9 @@ export default function App() {
       setIsSyncing(true);
       const result = await createFinanceSpreadsheet(
         accessToken,
-        `CatatKas - Keuangan Pribadi (${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })})`
+        `CatatKas - Catatan Keuangan Pribadi (${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })})`
       );
 
-      // Sync existing transactions right away into the new sheet
       await syncAllTransactionsToSheet(
         accessToken,
         result.spreadsheetId,
@@ -378,10 +419,8 @@ export default function App() {
     }
   };
 
-  // Google Sheets: Connect Existing Sheet
   const handleConnectExistingSheet = async (idOrUrl: string) => {
     let sheetId = idOrUrl.trim();
-    // Extract ID from URL if user pasted a link
     const match = idOrUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (match && match[1]) {
       sheetId = match[1];
@@ -394,7 +433,6 @@ export default function App() {
 
     try {
       setIsSyncing(true);
-      // Attempt reading to verify accessibility
       const fetchedTxs = await readTransactionsFromSheet(accessToken, sheetId);
       
       setSheetConfig({
@@ -409,27 +447,25 @@ export default function App() {
         setTransactions(fetchedTxs);
         showToast(`Berhasil terhubung! Memuat ${fetchedTxs.length} transaksi dari sheet.`, 'success');
       } else {
-        // Sync local to sheet
         await syncAllTransactionsToSheet(accessToken, sheetId, transactions, startingBalance);
         showToast('Berhasil terhubung ke spreadsheet!', 'success');
       }
       setIsSheetModalOpen(false);
     } catch (err: any) {
       console.error('Link sheet error:', err);
-      throw new Error('Tidak dapat mengakses Google Sheet. Pastikan ID benar dan sheet telah dibagikan akses.');
+      throw new Error('Tidak dapat mengakses Google Sheet. Pastikan ID benar.');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Google Sheets: Push Local Data to Sheet (Overwrite with confirmation)
   const handleSyncPushToSheet = async () => {
     if (!accessToken || !sheetConfig.spreadsheetId) return;
 
     setConfirmModal({
       isOpen: true,
       title: 'Sinkronkan Data ke Google Sheet?',
-      message: `Tindakan ini akan memperbarui isi Google Sheet dengan ${transactions.length} transaksi lokal saat ini beserta saldo awal ${formatRupiah(startingBalance)}.\n\nLanjutkan?`,
+      message: `Tindakan ini akan memperbarui isi Google Sheet dengan ${transactions.length} transaksi saat ini beserta saldo Rp ${formatRupiah(startingBalance)}.\n\nLanjutkan?`,
       confirmText: 'Kirim Data ke Sheet',
       cancelText: 'Batal',
       isDestructive: false,
@@ -458,14 +494,13 @@ export default function App() {
     });
   };
 
-  // Google Sheets: Pull Data from Sheet (Import)
   const handleSyncPullFromSheet = async () => {
     if (!accessToken || !sheetConfig.spreadsheetId) return;
 
     setConfirmModal({
       isOpen: true,
       title: 'Tarik Data dari Google Sheet?',
-      message: `Tindakan ini akan membaca data transaksi dari tab "Transaksi" di Google Sheet dan mengganti daftar transaksi lokal di aplikasi.\n\nPastikan data di spreadsheet sudah sesuai. Lanjutkan?`,
+      message: 'Membaca transaksi dari Google Sheet dan memperbarui catatan lokal.',
       confirmText: 'Muat Data Sheet',
       cancelText: 'Batal',
       isDestructive: false,
@@ -494,12 +529,11 @@ export default function App() {
     });
   };
 
-  // Google Sheets: Disconnect
   const handleDisconnectSheet = () => {
     setConfirmModal({
       isOpen: true,
       title: 'Putuskan Tautan Google Sheets?',
-      message: 'Aplikasi tidak lagi terhubung ke file spreadsheet ini. Data yang sudah tersimpan di Google Drive Anda tetap aman dan tidak akan terhapus.',
+      message: 'Aplikasi tidak lagi terhubung ke file spreadsheet ini. File di Google Drive tetap tersimpan aman.',
       confirmText: 'Putuskan Tautan',
       cancelText: 'Batal',
       isDestructive: true,
@@ -533,7 +567,7 @@ export default function App() {
 
       {/* Main Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-        {/* Toast Notification Alert */}
+        {/* Toast Alert */}
         {toastMessage && (
           <div
             className={`flex items-center justify-between p-3.5 rounded-2xl border text-xs font-semibold shadow-xs animate-in fade-in slide-in-from-top-2 duration-200 ${
@@ -563,18 +597,19 @@ export default function App() {
           </div>
         )}
 
-        {/* Financial Balance Overview */}
+        {/* Financial Balance Overview with E-Wallet & Cash Breakdown */}
         <BalanceCard
           summary={summary}
           onUpdateStartingBalance={(newBalance) => {
             setStartingBalance(newBalance);
-            showToast(`Dana / Saldo awal bulan ini diatur ke ${formatRupiah(newBalance)}`, 'success');
+            showToast(`Saldo awal diatur ke ${formatRupiah(newBalance)}`, 'success');
           }}
+          onResetAllToZero={handleResetAllToZero}
           onOpenAddModal={(type) => handleOpenAddModal(type)}
         />
 
-        {/* View Switcher Tabs: Riwayat vs Analisis */}
-        <div className="flex items-center justify-between gap-4 pt-2">
+        {/* View Switcher Tabs: Riwayat Transaksi vs Rekap Bulan Sekarang */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           <div className="flex bg-slate-200/70 p-1 rounded-xl">
             <button
               onClick={() => setActiveTab('transactions')}
@@ -585,7 +620,7 @@ export default function App() {
               }`}
             >
               <ListFilter className="w-4 h-4 text-emerald-600" />
-              <span>Daftar Transaksi Harian</span>
+              <span>Riwayat Transaksi Harian</span>
             </button>
             <button
               onClick={() => setActiveTab('analytics')}
@@ -596,19 +631,27 @@ export default function App() {
               }`}
             >
               <BarChart2 className="w-4 h-4 text-indigo-600" />
-              <span>Statistik &amp; Analisis Belanja</span>
+              <span>Rekap Bulan Sekarang</span>
             </button>
           </div>
 
-          {/* Quick Floating/Header Add Button */}
-          <button
-            onClick={() => handleOpenAddModal('expense')}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer shrink-0"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">Catat Pengeluaran / Pemasukan</span>
-            <span className="sm:hidden">Tambah</span>
-          </button>
+          {/* Quick Add Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleOpenAddModal('income')}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <ArrowUpRight className="w-4 h-4" />
+              <span>+ Pemasukan Saldo</span>
+            </button>
+            <button
+              onClick={() => handleOpenAddModal('expense')}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <ArrowDownLeft className="w-4 h-4" />
+              <span>- Catat Pengeluaran</span>
+            </button>
+          </div>
         </div>
 
         {/* Active Tab View */}
@@ -630,9 +673,9 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-12 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>CatatKas — Aplikasi Keuangan Pribadi &amp; Sinkronisasi Google Sheets</p>
+          <p>CatatKas — Catatan Keuangan Harian (E-Wallet &amp; Cash)</p>
           <div className="flex items-center gap-4 text-slate-500">
-            <span>Dana Awal: {formatRupiah(startingBalance)}</span>
+            <span>Saldo Dana: {formatRupiah(summary.currentBalance)}</span>
             <span>•</span>
             <span>{transactions.length} Transaksi Tercatat</span>
           </div>

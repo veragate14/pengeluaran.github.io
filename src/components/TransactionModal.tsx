@@ -8,7 +8,10 @@ import {
   Tag, 
   CreditCard, 
   FileText,
-  Plus
+  Plus,
+  HelpCircle,
+  Smartphone,
+  Banknote
 } from 'lucide-react';
 import { Transaction, TransactionType, Category, WalletType } from '../types/finance';
 import { getTodayDateString, getCurrentTimeString, formatRupiah } from '../utils/formatters';
@@ -42,14 +45,48 @@ const EXPENSE_CATEGORIES: Category[] = [
   'Lainnya',
 ];
 
-const WALLET_OPTIONS: WalletType[] = [
-  'Rekening Bank',
-  'Uang Tunai',
-  'E-Wallet (GoPay/OVO/Dana)',
-  'Lainnya',
+const WALLET_OPTIONS: { value: WalletType; label: string; icon: string; desc: string }[] = [
+  {
+    value: 'E-Wallet (DANA / GoPay / OVO)',
+    label: 'E-Wallet (DANA / GoPay / OVO)',
+    icon: 'smartphone',
+    desc: 'Saldo DANA, GoPay, OVO, ShopeePay',
+  },
+  {
+    value: 'Cash (Uang Tunai)',
+    label: 'Cash (Uang Tunai)',
+    icon: 'cash',
+    desc: 'Uang fisik di dompet / saku',
+  },
+  {
+    value: 'Rekening Bank',
+    label: 'Rekening Bank',
+    icon: 'bank',
+    desc: 'BCA, Mandiri, BRI, dsb.',
+  },
 ];
 
 const QUICK_AMOUNTS = [10000, 20000, 50000, 100000, 250000, 500000, 1000000];
+
+const COMMON_EXPENSE_REASONS = [
+  'Makan siang / malam',
+  'Beli bensin motor/mobil',
+  'Jajan / Kopi',
+  'Belanja kebutuhan dapur',
+  'Bayar pulsa / kuota',
+  'Bayar tagihan listrik/air',
+  'Parkir & transportasi',
+  'Keperluan pribadi',
+];
+
+const COMMON_INCOME_REASONS = [
+  'Gaji bulanan',
+  'Top up saldo DANA',
+  'Transfer dari teman/keluarga',
+  'Pendapatan jualan / freelance',
+  'Bonus / Cashback',
+  'Kembalian / Uang sisa',
+];
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
@@ -61,7 +98,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [type, setType] = useState<TransactionType>(initialType);
   const [amountStr, setAmountStr] = useState<string>('');
   const [category, setCategory] = useState<Category>('Makanan & Minuman');
-  const [wallet, setWallet] = useState<WalletType>('Rekening Bank');
+  const [wallet, setWallet] = useState<WalletType>('E-Wallet (DANA / GoPay / OVO)');
   const [date, setDate] = useState<string>(getTodayDateString());
   const [time, setTime] = useState<string>(getCurrentTimeString());
   const [description, setDescription] = useState<string>('');
@@ -80,7 +117,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setType(initialType);
       setAmountStr('');
       setCategory(initialType === 'income' ? 'Gaji' : 'Makanan & Minuman');
-      setWallet('Rekening Bank');
+      setWallet('E-Wallet (DANA / GoPay / OVO)');
       setDate(getTodayDateString());
       setTime(getCurrentTimeString());
       setDescription('');
@@ -88,7 +125,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setErrorMessage('');
   }, [isOpen, initialType, editingTransaction]);
 
-  // Sync default category when switching type if creating new
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     if (!editingTransaction) {
@@ -106,6 +142,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const cleanAmount = parseFloat(amountStr.replace(/[^0-9]/g, ''));
     if (isNaN(cleanAmount) || cleanAmount <= 0) {
       setErrorMessage('Nominal harus berupa angka lebih dari 0.');
+      return;
+    }
+
+    if (!description.trim()) {
+      setErrorMessage(
+        type === 'expense'
+          ? 'Mohon tulis alasan / keperluan mengeluarkan uang ini.'
+          : 'Mohon tulis keterangan sumber pemasukan uang ini.'
+      );
       return;
     }
 
@@ -131,6 +176,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   if (!isOpen) return null;
 
   const activeCategories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const commonReasons = type === 'income' ? COMMON_INCOME_REASONS : COMMON_EXPENSE_REASONS;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
@@ -140,10 +186,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         aria-modal="true"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">
-            {editingTransaction ? 'Edit Catatan Transaksi' : 'Catat Transaksi Baru'}
-          </h3>
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              {editingTransaction
+                ? 'Edit Transaksi'
+                : type === 'income'
+                ? 'Catat Pemasukan ke Saldo Dana'
+                : 'Catat Pengeluaran Dana'}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {type === 'income'
+                ? 'Tambah dana masuk ke e-wallet, cash, atau bank'
+                : 'Catat berapa uang keluar beserta alasannya'}
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
@@ -161,18 +218,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
               <button
                 type="button"
-                onClick={() => handleTypeChange('expense')}
-                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  type === 'expense'
-                    ? 'bg-rose-500 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-                }`}
-              >
-                <ArrowDownLeft className="w-4 h-4" />
-                <span>Pengeluaran (Keluar)</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => handleTypeChange('income')}
                 className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   type === 'income'
@@ -181,7 +226,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 }`}
               >
                 <ArrowUpRight className="w-4 h-4" />
-                <span>Pemasukan (Masuk)</span>
+                <span>Pemasukan (Tambah Saldo)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeChange('expense')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  type === 'expense'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <ArrowDownLeft className="w-4 h-4" />
+                <span>Pengeluaran (Uang Keluar)</span>
               </button>
             </div>
           </div>
@@ -190,7 +247,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Nominal (Rp)
+                {type === 'income' ? 'Berapa Nominal Masuk? (Rp)' : 'Berapa Pengeluarannya? (Rp)'}
               </label>
               {amountStr && (
                 <span className="text-xs font-bold text-slate-700">
@@ -230,8 +287,89 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 onClick={() => setAmountStr('')}
                 className="px-2 py-1 text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md transition-colors cursor-pointer"
               >
-                Reset
+                Reset ke 0
               </button>
+            </div>
+          </div>
+
+          {/* Wallet Choice: E-Wallet vs Cash vs Bank */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              <CreditCard className="w-3.5 h-3.5 inline mr-1" />
+              {type === 'income' ? 'Masuk ke Saldo Mana?' : 'Keluar dari Mana? (E-Wallet / Cash)'}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {WALLET_OPTIONS.map((opt) => {
+                const isSelected = wallet === opt.value;
+                return (
+                  <button
+                    type="button"
+                    key={opt.value}
+                    onClick={() => setWallet(opt.value)}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {opt.icon === 'smartphone' ? (
+                        <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : opt.icon === 'cash' ? (
+                        <Banknote className="w-4 h-4 text-amber-600 shrink-0" />
+                      ) : (
+                        <CreditCard className="w-4 h-4 text-indigo-600 shrink-0" />
+                      )}
+                      <span className="text-xs font-bold truncate">
+                        {opt.value.includes('E-Wallet')
+                          ? 'E-Wallet'
+                          : opt.value.includes('Cash')
+                          ? 'Cash (Tunai)'
+                          : 'Rekening Bank'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 line-clamp-1">
+                      {opt.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Alasan / Catatan Pengeluaran & Pemasukan */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              <FileText className="w-3.5 h-3.5 inline mr-1" />
+              {type === 'expense' ? 'Alasan Mengeluarkan Uang (Untuk Apa?)' : 'Catatan Sumber Pemasukan'}
+              <span className="text-rose-500 ml-0.5">*</span>
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={
+                type === 'expense'
+                  ? 'Contoh: Makan siang warteg, bensin motor, beli kopi...'
+                  : 'Contoh: Gaji, transfer dari teman, hasil freelance...'
+              }
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              required
+            />
+
+            {/* Quick Reason Chips */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <span className="text-[10px] text-slate-400 self-center">Pilihan cepat:</span>
+              {commonReasons.map((reason) => (
+                <button
+                  type="button"
+                  key={reason}
+                  onClick={() => setDescription(reason)}
+                  className="px-2 py-0.5 text-[10px] font-medium bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-md transition-colors cursor-pointer"
+                >
+                  {reason}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -241,7 +379,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <Tag className="w-3.5 h-3.5 inline mr-1" />
               Kategori
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50/50">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-32 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50/50">
               {activeCategories.map((cat) => (
                 <button
                   type="button"
@@ -259,25 +397,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Wallet / Source */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-              <CreditCard className="w-3.5 h-3.5 inline mr-1" />
-              Sumber Dana / Dompet
-            </label>
-            <select
-              value={wallet}
-              onChange={(e) => setWallet(e.target.value as WalletType)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              {WALLET_OPTIONS.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Date & Time */}
@@ -309,21 +428,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-              <FileText className="w-3.5 h-3.5 inline mr-1" />
-              Keterangan / Catatan (Opsional)
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Contoh: Makan siang bareng teman, Beli pulsa, dsb."
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-
           {errorMessage && (
             <div className="p-2.5 rounded-lg bg-rose-50 text-rose-700 text-xs font-medium">
               {errorMessage}
@@ -348,7 +452,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               }`}
             >
               <Plus className="w-4 h-4" />
-              <span>{editingTransaction ? 'Simpan Perubahan' : 'Tambahkan Catatan'}</span>
+              <span>
+                {editingTransaction
+                  ? 'Simpan Perubahan'
+                  : type === 'income'
+                  ? 'Simpan ke Saldo Dana'
+                  : 'Catat Pengeluaran'}
+              </span>
             </button>
           </div>
         </form>

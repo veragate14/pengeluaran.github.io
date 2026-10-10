@@ -16,7 +16,10 @@ export type Category =
   | 'Keluarga & Sedekah'
   | 'Lainnya';
 
-export type WalletType = 'Rekening Bank' | 'Uang Tunai' | 'E-Wallet (GoPay/OVO/Dana)' | 'Lainnya';
+export type WalletType = 
+  | 'E-Wallet (DANA / GoPay / OVO)' 
+  | 'Cash (Uang Tunai)' 
+  | 'Rekening Bank';
 
 export interface Transaction {
   id: string;
@@ -26,8 +29,8 @@ export interface Transaction {
   category: Category;
   amount: number;
   wallet: WalletType;
-  description: string;
-  sheetRowIndex?: number; // for sync reference
+  description: string; // Alasan / keperluan pengeluaran atau sumber pemasukan
+  sheetRowIndex?: number;
   createdAt: number;
 }
 
@@ -37,6 +40,14 @@ export interface FinanceSummary {
   totalExpense: number;
   currentBalance: number;
   transactionCount: number;
+  // Wallet breakdown
+  eWalletBalance: number;
+  cashBalance: number;
+  bankBalance: number;
+  // This month recap
+  thisMonthIncome: number;
+  thisMonthExpense: number;
+  thisMonthNet: number;
 }
 
 export interface GoogleSheetConfig {
